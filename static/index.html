@@ -702,7 +702,11 @@
             <div class="controls">
                 <button class="btn btn-primary" id="btnStart" onclick="startListening()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    Start
+                    Mic
+                </button>
+                <button class="btn btn-ghost" id="btnTabAudio" onclick="startTabAudioListening()" title="Capture audio from a browser tab or screen">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/></svg>
+                    Tab Audio
                 </button>
                 <button class="btn btn-danger" id="btnStop" onclick="stopListening()" disabled>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
@@ -745,7 +749,7 @@
                     <div class="empty-state-icon"></div>
                     <div class="empty-state-title">No audio received yet</div>
                     <div class="empty-state-desc">
-                        Choose the microphone or virtual audio device, then start listening. Live translation will appear here with the Vietnamese line prioritized for reading.
+                        Use Mic for a microphone or virtual audio device. For YouTube in headphones, use Tab Audio and share the YouTube tab with audio enabled.
                     </div>
                 </div>
 
@@ -959,6 +963,7 @@
             const text = document.getElementById('statusText');
             const viz = document.getElementById('visualizer');
             const btnStart = document.getElementById('btnStart');
+            const btnTabAudio = document.getElementById('btnTabAudio');
             const btnStop = document.getElementById('btnStop');
             const micSelect = document.getElementById('micSelect');
 
@@ -968,6 +973,7 @@
             if (!isConnected) {
                 text.textContent = 'Disconnected';
                 btnStart.disabled = true;
+                btnTabAudio.disabled = true;
                 btnStop.disabled = true;
                 micSelect.disabled = true;
             } else if (isListening) {
@@ -975,12 +981,14 @@
                 text.textContent = 'Listening';
                 viz.classList.add('active');
                 btnStart.disabled = true;
+                btnTabAudio.disabled = true;
                 btnStop.disabled = false;
                 micSelect.disabled = true;
             } else {
                 chip.classList.add('connected');
                 text.textContent = 'Connected';
                 btnStart.disabled = false;
+                btnTabAudio.disabled = false;
                 btnStop.disabled = true;
                 micSelect.disabled = false;
             }
@@ -1034,6 +1042,23 @@
             }
         }
 
+        function startAudioPipeline(stream, label) {
+            mediaStream = stream;
+            document.getElementById('cfgDevice').textContent = label;
+
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            audioSource = audioContext.createMediaStreamSource(mediaStream);
+            audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+            audioProcessor.onaudioprocess = (event) => {
+                if (!isListening || !ws || ws.readyState !== WebSocket.OPEN) return;
+                const input = event.inputBuffer.getChannelData(0);
+                const pcm = floatTo16BitPCM(resampleTo16k(input, audioContext.sampleRate));
+                if (pcm.byteLength > 0) ws.send(pcm);
+            };
+            audioSource.connect(audioProcessor);
+            audioProcessor.connect(audioContext.destination);
+        }
+
         async function startMicrophone() {
             const select = document.getElementById('micSelect');
             const deviceId = select.value;
@@ -1047,23 +1072,41 @@
                 }
             };
 
-            mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             await loadMicrophones();
             if (deviceId) select.value = deviceId;
-            document.getElementById('cfgDevice').textContent =
-                mediaStream.getAudioTracks()[0]?.label || 'Default microphone';
+            startAudioPipeline(
+                stream,
+                stream.getAudioTracks()[0]?.label || 'Default microphone'
+            );
+        }
 
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            audioSource = audioContext.createMediaStreamSource(mediaStream);
-            audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-            audioProcessor.onaudioprocess = (event) => {
-                if (!isListening || !ws || ws.readyState !== WebSocket.OPEN) return;
-                const input = event.inputBuffer.getChannelData(0);
-                const pcm = floatTo16BitPCM(resampleTo16k(input, audioContext.sampleRate));
-                if (pcm.byteLength > 0) ws.send(pcm);
-            };
-            audioSource.connect(audioProcessor);
-            audioProcessor.connect(audioContext.destination);
+        async function startTabAudio() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+                throw new Error('Tab audio capture is not supported by this browser');
+            }
+
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                audio: {
+                    channelCount: 1,
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                }
+            });
+            stream.getVideoTracks().forEach(track => track.stop());
+
+            const audioTracks = stream.getAudioTracks();
+            if (!audioTracks.length) {
+                stream.getTracks().forEach(track => track.stop());
+                throw new Error('No tab audio was shared');
+            }
+
+            audioTracks[0].addEventListener('ended', () => {
+                if (isListening) stopListening();
+            });
+            startAudioPipeline(stream, audioTracks[0].label || 'Browser tab audio');
         }
 
         function stopMicrophone() {
@@ -1107,10 +1150,26 @@
                 ws.send(JSON.stringify({ action: 'start_listening' }));
                 startTime = Date.now();
                 durationTimer = setInterval(updateDuration, 1000);
-                showToast('Listening started');
+                showToast('Microphone listening started');
             } catch (e) {
                 stopMicrophone();
                 showToast('Cannot access microphone');
+            }
+        }
+
+        async function startTabAudioListening() {
+            if (!ws || !isConnected) return;
+            try {
+                await startTabAudio();
+                ws.send(JSON.stringify({ action: 'start_listening' }));
+                startTime = Date.now();
+                durationTimer = setInterval(updateDuration, 1000);
+                showToast('Tab audio capture started');
+            } catch (e) {
+                stopMicrophone();
+                showToast(e.message === 'No tab audio was shared'
+                    ? 'Share the tab again and enable audio'
+                    : 'Cannot capture tab audio');
             }
         }
 
