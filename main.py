@@ -1,45 +1,87 @@
+"""🚀 DichTuDong - Local entry point.
+
+Run this for local development/testing.
+For production/VPS: use Docker (docker-compose up).
+
+Usage:
+    python main.py                  # Start server + local audio capture
+    python main.py --server-only    # Start server only (for Docker/remote client)
+    python main.py --client-only    # Start client only (connect to remote server)
+    python main.py --list-devices   # List audio input devices
+"""
+
 import sys
-from PyQt5.QtWidgets import QApplication
-from subtitle_window import SubtitleWindow
-from translator import TextTranslator
-from log_writer import LogWriter
-from mic_listener import MicTranscriberVAD
+import argparse
 from loguru import logger
-from config import MODEL_SIZE  # ✅ 可通过 config.py 控制模型大小
+from config import HOST, PORT, STT_MODEL_SIZE, DEEPL_API_KEY
 
-# ---------- 初始化 ----------
-app = QApplication(sys.argv)
-subtitle_window = SubtitleWindow()
-subtitle_window.show()
-subtitle_window.set_text("👃 Listening...", "正在监听中…")
 
-translator = TextTranslator(dest_lang="zh-cn")
-log_writer = LogWriter()
+def main():
+    parser = argparse.ArgumentParser(description="DichTuDong - Real-time Meeting Translator")
+    parser.add_argument("--server-only", action="store_true", help="Start server only")
+    parser.add_argument("--client-only", action="store_true", help="Start client only")
+    parser.add_argument("--list-devices", action="store_true", help="List audio devices")
+    parser.add_argument("--host", default=HOST, help=f"Server host (default: {HOST})")
+    parser.add_argument("--port", type=int, default=PORT, help=f"Server port (default: {PORT})")
+    args = parser.parse_args()
 
-# ---------- 文本处理逻辑 ----------
-def handle_text(text: str):
-    text = text.strip()
-    if not text:
+    if args.list_devices:
+        from client import list_devices
+        list_devices()
         return
-    logger.info(f"📋 Whisper: {text}")
+
+    # Print banner
+    print("""
+╔══════════════════════════════════════════════╗
+║   🎙️  DichTuDong - Real-time Translator      ║
+║   EN → VI | Subtitles + Voice               ║
+╚══════════════════════════════════════════════╝
+""")
+    print(f"  STT Model   : {STT_MODEL_SIZE}")
+    print(f"  Translation : {'DeepL' if DEEPL_API_KEY else 'Argos (offline)'}")
+    print(f"  Server      : {args.host}:{args.port}")
+    print()
+
+    if args.client_only:
+        # Client only - connect to remote server
+        from client import stream_audio
+        import asyncio
+        try:
+            asyncio.run(stream_audio())
+        except KeyboardInterrupt:
+            print("\n👋 Bye!")
+        return
+
+    if args.server_only:
+        # Server only
+        import uvicorn
+        from server import app
+        uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+        return
+
+    # Default: start server + local client in threads
+    import threading
+    import time
+
+    # Start server in background thread
+    def run_server():
+        import uvicorn
+        from server import app
+        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+    logger.info(f"🚀 Server starting on {args.host}:{args.port}...")
+    time.sleep(3)  # Wait for server to be ready
+
+    # Start local client
+    from client import stream_audio
+    import asyncio
     try:
-        translated = translator.translate(text) or "(翻译失败)"
-    except Exception as e:
-        logger.warning(f"🌐 翻译失败: {e}")
-        translated = "(翻译失败)"
+        asyncio.run(stream_audio())
+    except KeyboardInterrupt:
+        print("\n👋 Bye!")
 
-    logger.info(f"🌐 Translated: {translated}")
-    subtitle_window.set_text(text, translated)
-    log_writer.write(text, translated)
 
-# ---------- 麦克风监听器 ----------
-listener = MicTranscriberVAD(model_size=MODEL_SIZE, on_text=handle_text)
-listener.start()
-
-# ---------- 主线程保持运行 ----------
-try:
-    sys.exit(app.exec_())
-except KeyboardInterrupt:
-    logger.info("⛘️ 捕获 Ctrl+C，程序退出")
-    listener.stop()
-    sys.exit(0)
+if __name__ == "__main__":
+    main()

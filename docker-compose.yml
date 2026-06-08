@@ -1,0 +1,89 @@
+version: "3.8"
+
+services:
+  # ───── MiMo ASR mode (API, nhẹ, không cần GPU) ─────
+  app-mimo:
+    build:
+      context: .
+      dockerfile: Dockerfile.mimo
+    container_name: dichtudong-mimo
+    ports:
+      - "${PORT:-8765}:8765"
+    environment:
+      # STT: dùng MiMo API thay vì Whisper local
+      - STT_ENGINE=mimo
+      - MIMO_API_KEY=${MIMO_API_KEY}
+      - MIMO_BASE_URL=${MIMO_BASE_URL:-https://api.xiaomimimo.com/v1}
+      - MIMO_MODEL=${MIMO_MODEL:-mimo-v2.5-asr}
+      - STT_LANGUAGE=${STT_LANGUAGE:-en}
+      # Translation
+      - DEEPL_API_KEY=${DEEPL_API_KEY:-}
+      - TARGET_LANG=${TARGET_LANG:-VI}
+      - USE_ARGOS_FALLBACK=${USE_ARGOS_FALLBACK:-false}
+      # TTS
+      - TTS_ENABLED=${TTS_ENABLED:-false}
+      - TTS_VOICE=${TTS_VOICE:-vi-VN-HoaiMyNeural}
+      # Server
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  # ───── CPU mode (Whisper local, mặc định) ─────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dichtudong
+    ports:
+      - "${PORT:-8765}:8765"
+    environment:
+      - STT_ENGINE=whisper
+      - STT_MODEL_SIZE=${STT_MODEL_SIZE:-medium}
+      - STT_DEVICE=cpu
+      - STT_COMPUTE_TYPE=int8
+      - STT_LANGUAGE=${STT_LANGUAGE:-en}
+      - DEEPL_API_KEY=${DEEPL_API_KEY:-}
+      - TARGET_LANG=${TARGET_LANG:-VI}
+      - TTS_ENABLED=${TTS_ENABLED:-false}
+      - TTS_VOICE=${TTS_VOICE:-vi-VN-HoaiMyNeural}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    profiles:
+      - whisper
+
+  # ───── GPU mode (Whisper + CUDA) ─────
+  app-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: dichtudong-gpu
+    ports:
+      - "${PORT:-8765}:8765"
+    environment:
+      - STT_ENGINE=whisper
+      - STT_MODEL_SIZE=${STT_MODEL_SIZE:-medium}
+      - STT_DEVICE=cuda
+      - STT_COMPUTE_TYPE=float16
+      - STT_LANGUAGE=${STT_LANGUAGE:-en}
+      - DEEPL_API_KEY=${DEEPL_API_KEY:-}
+      - TARGET_LANG=${TARGET_LANG:-VI}
+      - TTS_ENABLED=${TTS_ENABLED:-false}
+      - TTS_VOICE=${TTS_VOICE:-vi-VN-HoaiMyNeural}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    profiles:
+      - gpu

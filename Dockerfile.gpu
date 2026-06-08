@@ -1,0 +1,37 @@
+# DichTuDong - GPU version (NVIDIA CUDA)
+FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04 AS gpu-base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Install Python 3.11
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-venv python3-pip \
+    libsndfile1 ffmpeg \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir ctranslate2>=4.0.0
+
+# Application code
+COPY . .
+
+# Create data directories
+RUN mkdir -p /app/data/logs /app/data/transcripts
+
+# Force CUDA device
+ENV STT_DEVICE=cuda \
+    STT_COMPUTE_TYPE=float16
+
+EXPOSE 8765
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/sessions')" || exit 1
+
+CMD ["python", "server.py"]

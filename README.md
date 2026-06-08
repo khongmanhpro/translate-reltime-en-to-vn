@@ -1,105 +1,156 @@
-# Voice2Sub
+# 🎙️ DichTuDong - Real-time Meeting Translator
 
-Real-time speech-to-subtitle and translation overlay for your screen, built with WhisperX and PyQt5.
+**EN → Vietnamese** real-time speech translation for online meetings (Teams, Zoom, Google Meet).
 
----
+## ✨ Features
 
-## What is Voice2Sub?
+- **Real-time STT** — faster-whisper (Whisper model, CPU/GPU)
+- **Translation** — DeepL API (500K free chars/month) + Argos Translate (offline fallback)
+- **TTS** — edge-tts Vietnamese voice (optional)
+- **Web UI** — Subtitle overlay, history, export (SRT/TXT)
+- **Transcript storage** — SQLite database
+- **Docker ready** — CPU & GPU support, one-command deploy
 
-Voice2Sub is a lightweight desktop tool that listens to your voice, transcribes it using WhisperX, translates it into your target language (like Chinese), and displays **bilingual subtitles** as an overlay on your screen — in real time.
+## 🏗️ Architecture
 
-It works fully offline (for transcription) and requires no API key for translation (via Google Translate).
-
----
-
-## Features
-
-- 🎙️ Real-time microphone transcription (WhisperX)
-- 🌐 Bilingual translation overlay (e.g. English → 中文)
-- 🪟 Frameless always-on-top subtitle window (PyQt5)
-- 🔇 Noise filtering + text de-duplication
-- 📜 Auto logging of raw and translated text
-- ⚙️ Customizable language, font, opacity, model size
-
----
-
-## Installation
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/light12222/voice2sub.git
-cd voice2sub
-````
-
-### 2. Create and activate a virtual environment
-
-```bash
-python3 -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
+```
+┌──────────────┐    WebSocket    ┌──────────────────┐
+│  Web Client   │◄──────────────►│  FastAPI Server   │
+│  (Browser)    │                │                    │
+└──────────────┘                │  faster-whisper    │
+                                │  DeepL/Argos       │
+┌──────────────┐    WebSocket    │  edge-tts          │
+│  Audio Client │───────────────►│  SQLite            │
+│  (Local mic)  │                └──────────────────┘
+└──────────────┘
 ```
 
-### 3. Install dependencies
+## 🚀 Quick Start
+
+### Option 1: Docker (recommended for VPS)
 
 ```bash
+# Clone
+git clone <repo-url> dichtudong
+cd dichtudong
+
+# Configure
+cp .env.example .env
+# Edit .env → set DEEPL_API_KEY
+
+# Run (CPU mode)
+docker-compose up -d
+
+# Access: http://localhost:8765
+```
+
+### Option 2: Docker with GPU
+
+```bash
+# Edit docker-compose.yml: uncomment app-gpu service, comment app service
+docker-compose up -d --build
+```
+
+### Option 3: Local development
+
+```bash
+# Install dependencies
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Configure
+cp .env.example .env
+# Edit .env
+
+# Run (server + local audio capture)
+python main.py
+
+# Or server only
+python main.py --server-only
+
+# Or client only (connect to remote server)
+python main.py --client-only
+
+# List audio devices
+python main.py --list-devices
 ```
 
----
+## 🎤 Audio Setup
 
-## Usage
-
+### macOS — BlackHole
 ```bash
-python main_debug.py
+brew install blackhole-2ch
+# System Preferences → Sound → Output → BlackHole 2ch
+# Then in client.py: DEVICE_NAME = "BlackHole 2ch"
 ```
 
-> A floating subtitle box will appear. Speak into your microphone, and see live translation.
+### Windows — VB-Cable
+Download: https://vb-audio.com/Cable/
+Set as default playback device, then capture from CABLE Output.
 
----
-
-## Configuration
-
-You can edit `config.py` to change:
-
-```python
-MODEL_SIZE = "medium.en"     # WhisperX model
-TARGET_LANG = "zh-cn"        # Translation language
-FONT_SIZE = 20               # Subtitle font size
-WINDOW_OPACITY = 0.85        # 0 = transparent, 1 = solid
+### Linux — PulseAudio
+```bash
+# Use PulseAudio monitor
+pactl list short sources | grep monitor
+# Set DEVICE_NAME to your monitor source
 ```
 
----
+## ⚙️ Configuration
 
-## Tech Stack
+| Variable | Default | Description |
+|---|---|---|
+| `STT_MODEL_SIZE` | `medium` | Whisper model (tiny/base/small/medium/large-v3) |
+| `STT_DEVICE` | `auto` | CPU or CUDA |
+| `STT_LANGUAGE` | `en` | Source language |
+| `DEEPL_API_KEY` | (empty) | DeepL API key (free at deepl.com/pro-api) |
+| `TARGET_LANG` | `VI` | Translation target |
+| `TTS_ENABLED` | `false` | Enable Vietnamese voice |
+| `TTS_VOICE` | `vi-VN-HoaiMyNeural` | TTS voice |
+| `PORT` | `8765` | Server port |
 
-* [WhisperX](https://github.com/m-bain/whisperx) for ASR
-* [googletrans](https://pypi.org/project/googletrans/) for translation
-* [PyQt5](https://pypi.org/project/PyQt5/) for the UI
-* [PyAudio](https://pypi.org/project/PyAudio/) for mic input
-* [loguru](https://github.com/Delgan/loguru) for logging
+## 📁 Project Structure
 
----
+```
+dichtudong/
+├── server.py          # FastAPI server (main backend)
+├── stt_engine.py      # Speech-to-text (faster-whisper)
+├── translator.py      # Translation (DeepL + Argos)
+├── tts_engine.py      # Text-to-speech (edge-tts)
+├── database.py        # SQLite transcript storage
+├── client.py          # Local audio capture client
+├── config.py          # Configuration
+├── main.py            # Local dev entry point
+├── static/
+│   └── index.html     # Web subtitle UI
+├── Dockerfile         # CPU Docker image
+├── Dockerfile.gpu     # GPU Docker image
+├── docker-compose.yml # Docker orchestration
+├── requirements.txt   # Python dependencies
+└── .env.example       # Environment template
+```
 
-## Roadmap
+## 🔌 API Endpoints
 
-* [x] Real-time ASR + translation
-* [x] Frameless PyQt5 overlay
-* [ ] OBS plugin / livestream support
-* [ ] Offline translation (Argos)
-* [ ] Voice activity segmentation (VAD)
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Web subtitle UI |
+| `/ws` | WebSocket | Real-time audio/subtitle stream |
+| `/api/sessions` | GET | List transcript sessions |
+| `/api/sessions/{id}/transcripts` | GET | Get session transcripts |
+| `/api/export/{id}/srt` | GET | Export as SRT |
+| `/api/export/{id}/txt` | GET | Export as TXT |
 
----
+## 📊 Model Size Guide
 
-## License
+| Model | Size | Speed (CPU) | Quality | RAM |
+|---|---|---|---|---|
+| tiny | 39M | ⚡⚡⚡⚡ | ⭐⭐ | ~1GB |
+| base | 74M | ⚡⚡⚡ | ⭐⭐⭐ | ~1GB |
+| small | 244M | ⚡⚡ | ⭐⭐⭐⭐ | ~2GB |
+| medium | 769M | ⚡ | ⭐⭐⭐⭐ | ~4GB |
+| large-v3 | 1.5G | 🐌 | ⭐⭐⭐⭐⭐ | ~6GB |
 
-MIT License © 2025 [light12222](https://github.com/light12222)
+## 📄 License
 
----
-
-## Credits
-
-* OpenAI Whisper / WhisperX
-* Silero VAD (planned)
-* PyQt5, googletrans, loguru
-
----
+Based on [Voice2Sub](https://github.com/light12222/Voice2Sub-Whisper-Live-Translator) (MIT License).

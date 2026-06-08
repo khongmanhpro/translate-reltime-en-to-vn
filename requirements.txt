@@ -1,10 +1,26 @@
-PyQt5
-pyaudio
-numpy
-faster-whisper
-silero-vad
-loguru
-googletrans==4.0.0rc1
-argostranslate
-librosa
-resampy
+# ─────────────────────────────────────────────────────
+# DichTuDong - Requirements
+# Chọn file cài đúng theo STT engine:
+#   STT_ENGINE=mimo    → requirements-mimo.txt  (nhẹ, ~200MB image)
+#   STT_ENGINE=whisper → requirements.txt       (nặng, ~3GB image)
+# ─────────────────────────────────────────────────────
+
+# Core server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+numpy>=1.24.0
+loguru>=0.7.0
+
+# STT - faster-whisper (local, chỉ cần khi STT_ENGINE=whisper)
+faster-whisper>=1.0.0
+
+# Translation
+argostranslate>=0.13.0
+
+# TTS
+edge-tts>=6.1.0
+
+# Audio processing (dùng cho client local, không cần trong Docker server)
+sounddevice>=0.4.6
+resampy>=0.4.2

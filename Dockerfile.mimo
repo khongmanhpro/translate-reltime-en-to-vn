@@ -1,0 +1,38 @@
+# DichTuDong - Dockerfile cho MiMo ASR mode
+# Nhẹ: không cần faster-whisper, torch, CUDA
+# STT được xử lý qua Xiaomi MiMo API (cloud)
+
+FROM python:3.11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    STT_ENGINE=mimo
+
+WORKDIR /app
+
+# System dependencies (nhẹ hơn rất nhiều so với Whisper mode)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsndfile1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies (không có faster-whisper/torch)
+COPY requirements-mimo.txt .
+RUN pip install --no-cache-dir -r requirements-mimo.txt
+
+# Application code
+COPY . .
+
+# Xóa .env khỏi image (dùng env_file trong compose)
+RUN rm -f /app/.env
+
+# Data directories
+RUN mkdir -p /app/data/logs /app/data/transcripts
+
+EXPOSE 8765
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -sf http://localhost:8765/api/sessions || exit 1
+
+CMD ["python", "server.py"]

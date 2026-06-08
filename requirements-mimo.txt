@@ -1,0 +1,15 @@
+# ─────────────────────────────────────────────────────
+# requirements-mimo.txt — dành cho STT_ENGINE=mimo
+# Image nhẹ ~200MB, không cần GPU, không cần Whisper model
+# Không có: faster-whisper, torch, ctranslate2, argostranslate, sounddevice, resampy
+# ─────────────────────────────────────────────────────
+
+# Core server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+numpy>=1.24.0
+loguru>=0.7.0
+
+# TTS optional, edge-tts gọi API và không kéo torch.
+edge-tts>=6.1.0

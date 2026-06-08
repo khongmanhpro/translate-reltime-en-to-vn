@@ -1,22 +1,47 @@
-"""🎛️ Central configuration for BilinBubble."""
+"""🎛️ Configuration for DichTuDong - Real-time Meeting Translator."""
 
+import os
 from pathlib import Path
 
-# ───── Whisper 模型设置 ─────
-MODEL_SIZE: str = "medium.en"    # 推荐使用 medium.en 或 large-v2
-USE_WHISPERX: bool = True        # 当前项目使用 WhisperX 后端
+# ───── STT Engine Selection ─────
+STT_ENGINE: str = os.getenv("STT_ENGINE", "whisper")  # "whisper" | "mimo"
 
-# ───── 目标翻译语言 ─────
-TARGET_LANG: str = "zh-cn"       # 用于 Google Translate，可改为 "en", "ja", etc.
+# ───── STT: Whisper (local) ─────
+STT_MODEL_SIZE: str = os.getenv("STT_MODEL_SIZE", "medium")  # tiny/base/small/medium/large-v3
+STT_DEVICE: str = os.getenv("STT_DEVICE", "auto")  # auto/cuda/cpu
+STT_COMPUTE_TYPE: str = os.getenv("STT_COMPUTE_TYPE", "auto")  # auto/float16/int8/float32
+STT_LANGUAGE: str = os.getenv("STT_LANGUAGE", "en")  # Source language
 
-# ───── 音频参数设置 ─────
-AUDIO_RATE: int = 16_000         # 采样率：16kHz
-CHUNK_SIZE: int = 4_000          # 每帧样本数：0.25 秒
-MIN_AUDIO_SEC: float = 0.5       # 最小音频时长（秒）：小于此值不触发识别
+# ───── STT: MiMo ASR API ─────
+MIMO_API_KEY: str = os.getenv("MIMO_API_KEY", "")
+MIMO_BASE_URL: str = os.getenv("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1")
+MIMO_MODEL: str = os.getenv("MIMO_MODEL", "mimo-v2.5-asr")
 
-# ───── 日志输出位置 ─────
-LOG_PATH: Path = Path("output/log.txt")  # 自动创建路径
+# ───── Translation ─────
+DEEPL_API_KEY: str = os.getenv("DEEPL_API_KEY", "")  # Free key or pro key
+DEEPL_API_URL: str = os.getenv("DEEPL_API_URL", "https://api-free.deepl.com/v2/translate")
+TARGET_LANG: str = os.getenv("TARGET_LANG", "VI")  # DeepL target language code
+# Fallback: argos-translate (offline)
+USE_ARGOS_FALLBACK: bool = os.getenv("USE_ARGOS_FALLBACK", "true").lower() == "true"
 
-# ───── 字幕窗口设置 ─────
-FONT_SIZE: int = 20              # 字体大小（pt）
-WINDOW_OPACITY: float = 0.85     # 窗口透明度：0=全透明，1=不透明
+# ───── TTS (edge-tts) ─────
+TTS_ENABLED: bool = os.getenv("TTS_ENABLED", "false").lower() == "true"
+TTS_VOICE: str = os.getenv("TTS_VOICE", "vi-VN-HoaiMyNeural")  # vi-VN-NamMinhNeural
+
+# ───── Audio ─────
+AUDIO_RATE: int = int(os.getenv("AUDIO_RATE", "16000"))
+CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "4000"))
+MIN_AUDIO_SEC: float = float(os.getenv("MIN_AUDIO_SEC", "2.0"))
+MAX_BUFFER_SECONDS: int = int(os.getenv("MAX_BUFFER_SECONDS", "8"))
+MIN_VOLUME: float = float(os.getenv("MIN_VOLUME", "0.005"))
+
+# ───── Database ─────
+DB_PATH: Path = Path(os.getenv("DB_PATH", "data/transcripts.db"))
+
+# ───── Server ─────
+HOST: str = os.getenv("HOST", "0.0.0.0")
+PORT: int = int(os.getenv("PORT", "8765"))
+
+# ───── Logging ─────
+LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+LOG_PATH: Path = Path(os.getenv("LOG_PATH", "data/logs/app.log"))

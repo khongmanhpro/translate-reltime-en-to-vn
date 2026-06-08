@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+*.pyc
+__pycache__
+.venv
+venv
+data/
+*.db
+*.log
+.DS_Store
+output/
+README.md
+LICENSE
